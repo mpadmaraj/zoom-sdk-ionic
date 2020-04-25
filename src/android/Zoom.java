@@ -8,10 +8,14 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import android.util.Log;
 import us.zoom.sdk.JoinMeetingOptions;
+import us.zoom.sdk.MeetingViewsOptions;
 import us.zoom.sdk.JoinMeetingParams;
 import us.zoom.sdk.MeetingError;
 import us.zoom.sdk.MeetingService;
 import us.zoom.sdk.ZoomSDK;
+import us.zoom.sdk.ZoomSDKInitializeListener;
+import cordova.plugin.zoom.AuthThread;
+import java.util.concurrent.FutureTask;
 
 /**
  * Zoom
@@ -21,14 +25,15 @@ import us.zoom.sdk.ZoomSDK;
  * @author  Carson Chen (carson.chen@zoom.us)
  * @version v4.4.55130.0712
  */
-public class Zoom extends CordovaPlugin {
+public class Zoom extends CordovaPlugin implements ZoomSDKInitializeListener {
     /* Debug variables */
     private static final String TAG = "<------- ZoomCordovaPlugin ---------->";
     private static final boolean DEBUG = false;
-
+    public static final Object LOCK = new Object();
+    private final String WEB_DOMAIN = "zoom.us";
     private ZoomSDK mZoomSDK;
     private CallbackContext callbackContext;
-
+    private InitAuthSDKCallback mInitAuthSDKCallback;
     /**
      * execute
      *
@@ -52,7 +57,12 @@ public class Zoom extends CordovaPlugin {
         this.callbackContext = callbackContext;
         this.mZoomSDK = ZoomSDK.getInstance();
 
-        switch(action) {
+        switch (action) {
+            case "initialize":
+            String appKey = args.getString(0);
+            String appSecret = args.getString(1);
+            this.initialize(appKey, appSecret, callbackContext);
+            break;
             case "joinMeeting":
                 String meetingNo = args.getString(0);
                 String meetingPassword = args.getString(1);
@@ -66,6 +76,68 @@ public class Zoom extends CordovaPlugin {
         return true;
     }
 
+
+      /**
+     * initialize
+     *
+     * Initialize Zoom SDK.
+     *
+     * @param appKey        Zoom SDK app key.
+     * @param appSecret     Zoom SDK app secret.
+     * @param callbackContext Cordova callback context.
+     */
+      private void initialize(String appKey, String appSecret, CallbackContext callbackContext) {
+        if (DEBUG) {
+            Log.v(TAG, "********** Zoom's initialize called **********");
+            Log.v(TAG, "appKey length = " + appKey.length());
+            Log.v(TAG, "appSecret length= " + appSecret.length());
+        }
+    
+        if (appKey == null || appKey.trim().isEmpty() || appKey.equals("null")
+                || appSecret == null || appSecret.trim().isEmpty() || appSecret.equals("null")) {
+            callbackContext.error("Both SDK key and secret cannot be empty");
+            return;
+        }
+        
+        try {
+            AuthThread at = new AuthThread();                           // Prepare Auth Thread
+            at.setCordova(cordova);                                     // Set cordova
+            at.setCallbackContext(callbackContext);                     // Set callback context
+            at.setAction("initialize");                                 // Set action
+            at.setLock(LOCK);
+            at.setInitParameters(appKey, appSecret, this.WEB_DOMAIN);   // Set init parameters
+            FutureTask<Boolean> fr = new FutureTask<Boolean>(at);
+
+            cordova.getActivity().runOnUiThread(fr);                    // Run init method on main thread
+
+            boolean threadSuccess = fr.get();                           // False if has error.
+            if (DEBUG) {
+                Log.v(TAG, "******************Return from Future is: " + threadSuccess);
+            }
+
+            if (threadSuccess) {
+                // Wait until the initialize result is back.
+                synchronized (LOCK) {
+                    try {
+                        if (DEBUG) {
+                            Log.v(TAG, "Wait................................");
+                        }
+                        LOCK.wait();
+                    } catch (InterruptedException e) {
+                        if (DEBUG) {
+                            Log.v(TAG, e.getMessage());
+                        }
+                    }
+                }
+            }
+
+            callbackContext.success("Initialize successfully!");
+        } catch (Exception e) {
+            callbackContext.error(e.getMessage());
+        }
+        
+
+      }
 
     /**
      * joinMeeting
@@ -138,7 +210,7 @@ public class Zoom extends CordovaPlugin {
             JoinMeetingOptions opts = new JoinMeetingOptions();
             try {
                 opts.no_driving_mode = option.isNull("no_driving_mode")? false : option.getBoolean("no_driving_mode");
-                opts.no_invite = option.isNull("no_invite")? false : option.getBoolean("no_invite");
+                opts.no_invite = option.isNull("no_invite")? true : option.getBoolean("no_invite");
                 opts.no_meeting_end_message = option.isNull("no_meeting_end_message")? false : option.getBoolean("no_meeting_end_message");
                 opts.no_titlebar = option.isNull("no_titlebar")? false : option.getBoolean("no_titlebar");
                 opts.no_bottom_toolbar = option.isNull("no_bottom_toolbar")? false : option.getBoolean("no_bottom_toolbar");
@@ -149,6 +221,10 @@ public class Zoom extends CordovaPlugin {
                 opts.no_audio = option.isNull("no_audio")? false : option.getBoolean("no_audio");
                 opts.no_video = option.isNull("no_video")? false : option.getBoolean("no_video");
                 opts.no_meeting_error_message = option.isNull("no_meeting_error_message")? false : option.getBoolean("no_meeting_error_message");
+                opts.meeting_views_options = MeetingViewsOptions.NO_TEXT_PASSWORD;
+                //opts.meeting_views_options = MeetingViewsOptions.NO_BUTTON_SHARE;
+                opts.custom_meeting_id = option.isNull("custom_meeting_id")? "" : option.getString("custom_meeting_id");
+                opts.invite_options = 2;
             } catch (JSONException ex) {
                 if (DEBUG) { Log.i(TAG, ex.getMessage()); }
             }
@@ -205,7 +281,7 @@ public class Zoom extends CordovaPlugin {
 
         StringBuilder message = new StringBuilder();
 
-        switch(errorCode) {
+        switch (errorCode) {
             case MeetingError.MEETING_ERROR_CLIENT_INCOMPATIBLE:
                 message.append("Zoom SDK version is too low to connect to the meeting");
                 break;
@@ -290,4 +366,19 @@ public class Zoom extends CordovaPlugin {
         }
         return message.toString();
     }
+    
+    @Override
+    public void onZoomSDKInitializeResult(int errorCode, int internalErrorCode) {
+        Log.i(TAG, "onZoomSDKInitializeResult, errorCode=" + errorCode + ", internalErrorCode=" + internalErrorCode);
+
+        if (mInitAuthSDKCallback != null) {
+            mInitAuthSDKCallback.onZoomSDKInitializeResult(errorCode, internalErrorCode);
+        }
+    }
+
+    @Override
+    public void onZoomAuthIdentityExpired() {
+        Log.e(TAG,"onZoomAuthIdentityExpired in init");
+    }
+
 }

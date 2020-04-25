@@ -29,6 +29,8 @@
         <source-file framework="true" src="libs/android/commonlib.aar" target-dir="libs/android" />
         <source-file framework="true" src="libs/android/mobilertc.aar" target-dir="libs/android" />
         <source-file src="src/android/Zoom.java" target-dir="src/cordova/plugin/zoom/Zoom" />
+         <source-file framework="true" src="src/android/AuthThread.java" target-dir="src/cordova/plugin/zoom/Zoom" />
+          <source-file framework="true" src="src/android/InitAuthSDKCallback.java" target-dir="src/cordova/plugin/zoom/Zoom" />
         <framework custom="true" src="src/android/build-extras.gradle" target-dir="." type="gradleReference" />
     </platform>
     <platform name="ios">

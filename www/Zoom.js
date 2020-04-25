@@ -10,6 +10,10 @@ function callNativeFunction (name, args, success, error) {
 
 var zoom = {
 
+    initialize: function(appKey, appSecret, success, error) {
+        callNativeFunction('initialize', [appKey, appSecret], success, error);
+    },
+  
     joinMeeting: function (meetingNo, meetingPassword, displayName, options, success, error) {
         callNativeFunction('joinMeeting', [meetingNo, meetingPassword, displayName, options], success, error);
     }
