@@ -7,10 +7,9 @@ function callNativeFunction (name, args, success, error) {
   error = error || function () {};
   exec(success, error, PLUGIN_NAME, name, args);
 }
-
 var zoom = {
 
-    initialize: function(appKey, appSecret, success, error) {
+    initialize: function (appKey, appSecret, success, error) {
         callNativeFunction('initialize', [appKey, appSecret], success, error);
     },
   
@@ -20,4 +19,8 @@ var zoom = {
 
 };
 
+window.meetingEnded = function () { 
+    console.log("Call Ended!")
+    navigator.app.exitApp();
+}
 module.exports = zoom;

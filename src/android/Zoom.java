@@ -12,9 +12,13 @@ import us.zoom.sdk.MeetingViewsOptions;
 import us.zoom.sdk.JoinMeetingParams;
 import us.zoom.sdk.MeetingError;
 import us.zoom.sdk.MeetingService;
+import us.zoom.sdk.InMeetingService;
+import us.zoom.sdk.MeetingEndReason;
+import us.zoom.sdk.MeetingSettingsHelper;
 import us.zoom.sdk.ZoomSDK;
 import us.zoom.sdk.ZoomSDKInitializeListener;
 import cordova.plugin.zoom.AuthThread;
+import cordova.plugin.zoom.InMeetingListener;
 import java.util.concurrent.FutureTask;
 
 /**
@@ -34,6 +38,21 @@ public class Zoom extends CordovaPlugin implements ZoomSDKInitializeListener {
     private ZoomSDK mZoomSDK;
     private CallbackContext callbackContext;
     private InitAuthSDKCallback mInitAuthSDKCallback;
+    private InMeetingListener listener = new InMeetingListener() {
+        @Override
+        public void onMeetingLeaveComplete(long l) {
+            if (l == MeetingEndReason.END_BY_HOST ) {
+                cordova.getActivity().runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        webView.loadUrl("javascript:meetingEnded()");
+                    }
+                });
+            }
+    }
+
+    };
+
     /**
      * execute
      *
@@ -56,7 +75,7 @@ public class Zoom extends CordovaPlugin implements ZoomSDKInitializeListener {
         cordova.setActivityResultCallback(this);
         this.callbackContext = callbackContext;
         this.mZoomSDK = ZoomSDK.getInstance();
-
+        this.registerMeetingServiceListener();
         switch (action) {
             case "initialize":
             String appKey = args.getString(0);
@@ -76,6 +95,12 @@ public class Zoom extends CordovaPlugin implements ZoomSDKInitializeListener {
         return true;
     }
 
+    private void registerMeetingServiceListener() {
+        InMeetingService meetingService = this.mZoomSDK.getInMeetingService();
+        if (meetingService != null) {
+            meetingService.addListener(listener);
+        }
+    }
 
       /**
      * initialize
@@ -209,22 +234,44 @@ public class Zoom extends CordovaPlugin implements ZoomSDKInitializeListener {
             // If meeting option is provoded, setup meeting options and join meeting.
             JoinMeetingOptions opts = new JoinMeetingOptions();
             try {
-                opts.no_driving_mode = option.isNull("no_driving_mode")? false : option.getBoolean("no_driving_mode");
+                opts.no_driving_mode = option.isNull("no_driving_mode")? true : option.getBoolean("no_driving_mode");
                 opts.no_invite = option.isNull("no_invite")? true : option.getBoolean("no_invite");
-                opts.no_meeting_end_message = option.isNull("no_meeting_end_message")? false : option.getBoolean("no_meeting_end_message");
+                opts.no_meeting_end_message = option.isNull("no_meeting_end_message")? true : option.getBoolean("no_meeting_end_message");
                 opts.no_titlebar = option.isNull("no_titlebar")? false : option.getBoolean("no_titlebar");
                 opts.no_bottom_toolbar = option.isNull("no_bottom_toolbar")? false : option.getBoolean("no_bottom_toolbar");
                 opts.no_dial_in_via_phone = option.isNull("no_dial_in_via_phone")? false : option.getBoolean("no_dial_in_via_phone");
-                opts.no_dial_out_to_phone = option.isNull("no_dial_out_to_phone")? false : option.getBoolean("no_dial_out_to_phone");
-                opts.no_disconnect_audio = option.isNull("no_disconnect_audio")? false : option.getBoolean("no_disconnect_audio");
-                opts.no_share = option.isNull("no_share")? false : option.getBoolean("no_share");
-                opts.no_audio = option.isNull("no_audio")? false : option.getBoolean("no_audio");
-                opts.no_video = option.isNull("no_video")? false : option.getBoolean("no_video");
-                opts.no_meeting_error_message = option.isNull("no_meeting_error_message")? false : option.getBoolean("no_meeting_error_message");
-                opts.meeting_views_options = MeetingViewsOptions.NO_TEXT_PASSWORD;
-                //opts.meeting_views_options = MeetingViewsOptions.NO_BUTTON_SHARE;
+                opts.no_dial_out_to_phone = option.isNull("no_dial_out_to_phone")? true : option.getBoolean("no_dial_out_to_phone");
+                opts.no_disconnect_audio = option.isNull("no_disconnect_audio")? true : option.getBoolean("no_disconnect_audio");
+                
+                //opts.no_share = option.isNull("no_share")? false : option.getBoolean("no_share");
+                //opts.no_audio = option.isNull("no_audio")? false : option.getBoolean("no_audio");
+                //opts.no_video = option.isNull("no_video")? false : option.getBoolean("no_video");
+                opts.no_meeting_error_message = option.isNull("no_meeting_error_message")? true : option.getBoolean("no_meeting_error_message");
+                MeetingSettingsHelper msHelper = zoomSDK.getMeetingSettingsHelper();
+                msHelper.setAutoConnectVoIPWhenJoinMeeting(true);
+                msHelper.setAlwaysShowMeetingToolbarEnabled(true);
+                if (!option.isNull("is_consulting") && option.getBoolean("is_consulting")) {
+                    opts.meeting_views_options =
+                    MeetingViewsOptions.NO_BUTTON_PARTICIPANTS +
+                    MeetingViewsOptions.NO_BUTTON_MORE +
+                    MeetingViewsOptions.NO_TEXT_MEETING_ID +
+                    MeetingViewsOptions.NO_TEXT_PASSWORD;
+                    msHelper.setMuteMyMicrophoneWhenJoinMeeting(false);
+                    msHelper.setTurnOffMyVideoWhenJoinMeeting(false);
+                } else {
+                    opts.meeting_views_options =
+                    MeetingViewsOptions.NO_BUTTON_PARTICIPANTS +
+                    MeetingViewsOptions.NO_BUTTON_MORE +
+                    MeetingViewsOptions.NO_BUTTON_SHARE +
+                    MeetingViewsOptions.NO_TEXT_MEETING_ID +
+                    MeetingViewsOptions.NO_TEXT_PASSWORD;
+                    msHelper.setMuteMyMicrophoneWhenJoinMeeting(true);
+                    msHelper.setTurnOffMyVideoWhenJoinMeeting(true);
+                }
                 opts.custom_meeting_id = option.isNull("custom_meeting_id")? "" : option.getString("custom_meeting_id");
                 opts.invite_options = 2;
+                //
+
             } catch (JSONException ex) {
                 if (DEBUG) { Log.i(TAG, ex.getMessage()); }
             }
@@ -378,7 +425,7 @@ public class Zoom extends CordovaPlugin implements ZoomSDKInitializeListener {
 
     @Override
     public void onZoomAuthIdentityExpired() {
-        Log.e(TAG,"onZoomAuthIdentityExpired in init");
+        Log.e(TAG, "onZoomAuthIdentityExpired in init");
     }
 
 }
