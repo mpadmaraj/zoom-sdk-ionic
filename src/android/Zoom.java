@@ -41,14 +41,12 @@ public class Zoom extends CordovaPlugin implements ZoomSDKInitializeListener {
     private InMeetingListener listener = new InMeetingListener() {
         @Override
         public void onMeetingLeaveComplete(long l) {
-            if (l == MeetingEndReason.END_BY_HOST ) {
-                cordova.getActivity().runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        webView.loadUrl("javascript:meetingEnded()");
-                    }
-                });
-            }
+            cordova.getActivity().runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    webView.loadUrl("javascript:meetingEnded()");
+                }
+            });
     }
 
     };
