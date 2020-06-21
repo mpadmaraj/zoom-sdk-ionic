@@ -20,7 +20,7 @@ import us.zoom.sdk.ZoomSDKInitializeListener;
 import cordova.plugin.zoom.AuthThread;
 import cordova.plugin.zoom.InMeetingListener;
 import java.util.concurrent.FutureTask;
-
+import android.app.Activity;
 /**
  * Zoom
  *
@@ -44,7 +44,14 @@ public class Zoom extends CordovaPlugin implements ZoomSDKInitializeListener {
             cordova.getActivity().runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    webView.loadUrl("javascript:meetingEnded()");
+                    try {
+                        Activity activity = cordova.getActivity();
+                        callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, 0));
+                        System.runFinalizersOnExit(true);
+                        System.exit(0);
+                    } catch (Exception e) {
+                        callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.ERROR, 1));
+                    }
                 }
             });
     }
